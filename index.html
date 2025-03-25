@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Money Transaction Tracker</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    <style>
+        .loading {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+        }
+        @media (max-width: 768px) {
+            .table-container {
+                overflow-x: auto;
+            }
+        }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <div class="max-w-7xl mx-auto p-4">
+        <div class="mb-6">
+            <h1 class="text-3xl font-bold text-gray-800">लेन-देन ट्रैकर</h1>
+        </div>
+
+        <!-- Search Bar -->
+        <div class="mb-6 flex flex-wrap gap-4">
+            <input type="text" id="searchInput" placeholder="Search transactions..." 
+                class="p-2 border rounded-lg flex-1">
+            <button onclick="showAddModal()" 
+                class="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600">
+                Add New Transaction <i class="bi bi-plus-lg"></i>
+            </button>
+        </div>
+
+        <!-- Table -->
+        <div class="table-container bg-white rounded-lg shadow">
+            <table class="min-w-full">
+                <thead class="bg-gray-100">
+                    <tr>
+                        <th class="px-4 py-2 text-left">Date</th>
+                        <th class="px-4 py-2 text-left">Name</th>
+                        <th class="px-4 py-2 text-left">Phone</th>
+                        <th class="px-4 py-2 text-left">Amount</th>
+                        <th class="px-4 py-2 text-left">Interest Rate (%)</th>
+                        <th class="px-4 py-2 text-left">Time Elapsed</th>
+                        <th class="px-4 py-2 text-left">Total Interest</th>
+                        <th class="px-4 py-2 text-left">Total Amount</th>
+                        <th class="px-4 py-2 text-left">Remarks</th>
+                        <th class="px-4 py-2 text-left">Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="transactionTable">
+                    <!-- Data will be populated here -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Add/Edit Modal -->
+    <div id="modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
+        <div class="bg-white p-6 rounded-lg w-full max-w-md">
+            <h2 id="modalTitle" class="text-2xl font-bold mb-4">Add Transaction</h2>
+            <form id="transactionForm" onsubmit="handleSubmit(event)">
+                <input type="hidden" id="recordId">
+                <div class="mb-4">
+                    <label class="block mb-1">Name</label>
+                    <input type="text" id="name" required class="w-full p-2 border rounded">
+                </div>
+                <div class="mb-4">
+                    <label class="block mb-1">Phone</label>
+                    <input type="tel" id="phone" required class="w-full p-2 border rounded">
+                </div>
+                <div class="mb-4">
+                    <label class="block mb-1">Amount</label>
+                    <input type="number" id="amount" required class="w-full p-2 border rounded">
+                </div>
+                <div class="mb-4">
+                    <label class="block mb-1">Interest Rate (%)</label>
+                    <input type="number" id="interestRate" required class="w-full p-2 border rounded" step="0.01">
+                </div>
+                <div class="mb-4">
+                    <label class="block mb-1">Remarks</label>
+                    <textarea id="remarks" class="w-full p-2 border rounded"></textarea>
+                </div>
+                <div class="flex justify-end gap-2">
+                    <button type="button" onclick="closeModal()" 
+                        class="px-4 py-2 bg-gray-200 rounded hover:bg-gray-300">Cancel</button>
+                    <button type="submit" 
+                        class="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600">Save</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Loading Spinner -->
+    <div id="loading" class="loading">
+        <div class="animate-spin rounded-full h-16 w-16 border-t-4 border-blue-500"></div>
+    </div>
+
+    <script>
+        let transactions = [];
+        const userId = localStorage.getItem('userId') || 'user_' + Math.random().toString(36).substr(2, 9);
+        const appSlug = 'money-tracker';
+
+        // Initialize
+        window.onload = () => {
+            if (!localStorage.getItem('userId')) {
+                localStorage.setItem('userId', userId);
+            }
+            loadTransactions();
+        }
+
+        // Search functionality
+        document.getElementById('searchInput').addEventListener('input', (e) => {
+            const searchTerm = e.target.value.toLowerCase();
+            const filtered = transactions.filter(t => 
+                t.data.name.toLowerCase().includes(searchTerm) ||
+                t.data.phone.includes(searchTerm) ||
+                t.data.remarks?.toLowerCase().includes(searchTerm)
+            );
+            renderTransactions(filtered);
+        });
+
+        async function loadTransactions() {
+            showLoading();
+            try {
+                const response = await fetch('https://r0c8kgwocscg8gsokogwwsw4.zetaverse.one/db', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': 'Bearer W0ZOUS0fzKRDkAxiBIMxIsliqg72',
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        userId,
+                        appSlug,
+                        action: 'read',
+                        table: 'transactions'
+                    })
+                });
+                const result = await response.json();
+                if (!result.error) {
+                    transactions = result.data || [];
+                    renderTransactions(transactions);
+                }
+            } catch (err) {
+                console.error('Error loading transactions:', err);
+            }
+            hideLoading();
+        }
+
+        function renderTransactions(data) {
+            const tbody = document.getElementById('transactionTable');
+            tbody.innerHTML = '';
+            
+            data.forEach(record => {
+                const tr = document.createElement('tr');
+                const transaction = record.data;
+                const startDate = new Date(record.created_at);
+                const timeElapsed = getTimeElapsed(startDate);
+                const totalInterest = calculateInterest(transaction.amount, transaction.interestRate, startDate);
+                
+                tr.innerHTML = `
+                    <td class="px-4 py-2">${new Date(record.created_at).toLocaleDateString()}</td>
+                    <td class="px-4 py-2">${transaction.name}</td>
+                    <td class="px-4 py-2">
+                        <a href="tel:${transaction.phone}" class="text-blue-500">${transaction.phone}</a>
+                    </td>
+                    <td class="px-4 py-2">₹${transaction.amount}</td>
+                    <td class="px-4 py-2">${transaction.interestRate}%</td>
+                    <td class="px-4 py-2">${timeElapsed}</td>
+                    <td class="px-4 py-2">₹${totalInterest.toFixed(2)}</td>
+                    <td class="px-4 py-2">₹${(Number(transaction.amount) + totalInterest).toFixed(2)}</td>
+                    <td class="px-4 py-2">${transaction.remarks || '-'}</td>
+                    <td class="px-4 py-2">
+                        <button onclick="editTransaction('${record.id}')" 
+                            class="text-blue-500 hover:text-blue-700 mr-2">
+                            <i class="bi bi-pencil"></i>
+                        </button>
+                        <button onclick="deleteTransaction('${record.id}')" 
+                            class="text-red-500 hover:text-red-700 mr-2">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                        <button onclick="sendReminder('${transaction.phone}', ${transaction.amount}, ${totalInterest})" 
+                            class="text-green-500 hover:text-green-700">
+                            <i class="bi bi-chat-dots"></i>
+                        </button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        function calculateInterest(principal, rate, startDate) {
+            const days = (new Date() - new Date(startDate)) / (1000 * 60 * 60 * 24);
+            return (principal * rate * days) / (100 * 365);
+        }
+
+        function getTimeElapsed(startDate) {
+            const diff = new Date() - new Date(startDate);
+            const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+            return days + ' days';
+        }
+
+        async function handleSubmit(event) {
+            event.preventDefault();
+            showLoading();
+
+            const formData = {
+                name: document.getElementById('name').value,
+                phone: document.getElementById('phone').value,
+                amount: Number(document.getElementById('amount').value),
+                interestRate: Number(document.getElementById('interestRate').value),
+                remarks: document.getElementById('remarks').value
+            };
+
+            const recordId = document.getElementById('recordId').value;
+            const action = recordId ? 'update' : 'create';
+
+            try {
+                const response = await fetch('https://r0c8kgwocscg8gsokogwwsw4.zetaverse.one/db', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': 'Bearer W0ZOUS0fzKRDkAxiBIMxIsliqg72',
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        userId,
+                        appSlug,
+                        action,
+                        table: 'transactions',
+                        id: recordId || undefined,
+                        data: formData
+                    })
+                });
+
+                const result = await response.json();
+                if (!result.error) {
+                    closeModal();
+                    loadTransactions();
+                }
+            } catch (err) {
+                console.error('Error saving transaction:', err);
+            }
+            hideLoading();
+        }
+
+        async function deleteTransaction(id) {
+            if (!confirm('Are you sure you want to delete this transaction?')) return;
+            
+            showLoading();
+            try {
+                await fetch('https://r0c8kgwocscg8gsokogwwsw4.zetaverse.one/db', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': 'Bearer W0ZOUS0fzKRDkAxiBIMxIsliqg72',
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        userId,
+                        appSlug,
+                        action: 'delete',
+                        table: 'transactions',
+                        id
+                    })
+                });
+                loadTransactions();
+            } catch (err) {
+                console.error('Error deleting transaction:', err);
+            }
+            hideLoading();
+        }
+
+        function editTransaction(id) {
+            const transaction = transactions.find(t => t.id === id);
+            if (transaction) {
+                document.getElementById('recordId').value = id;
+                document.getElementById('name').value = transaction.data.name;
+                document.getElementById('phone').value = transaction.data.phone;
+                document.getElementById('amount').value = transaction.data.amount;
+                document.getElementById('interestRate').value = transaction.data.interestRate;
+                document.getElementById('remarks').value = transaction.data.remarks || '';
+                document.getElementById('modalTitle').textContent = 'Edit Transaction';
+                showAddModal();
+            }
+        }
+
+        function sendReminder(phone, amount, interest) {
+            const total = (amount + interest).toFixed(2);
+            const message = `Reminder: Your loan amount of ₹${amount} has accumulated interest of ₹${interest.toFixed(2)}. Total due: ₹${total}`;
+            window.open(`sms:${phone}?body=${encodeURIComponent(message)}`);
+        }
+
+        function showAddModal() {
+            document.getElementById('modal').classList.remove('hidden');
+            if (!document.getElementById('recordId').value) {
+                document.getElementById('transactionForm').reset();
+                document.getElementById('modalTitle').textContent = 'Add Transaction';
+            }
+        }
+
+        function closeModal() {
+            document.getElementById('modal').classList.add('hidden');
+            document.getElementById('recordId').value = '';
+            document.getElementById('transactionForm').reset();
+        }
+
+        function showLoading() {
+            document.getElementById('loading').style.display = 'block';
+        }
+
+        function hideLoading() {
+            document.getElementById('loading').style.display = 'none';
+        }
+    </script>
+<script>document.body.addEventListener('wheel', e => { if (!e.ctrlKey) return; e.preventDefault(); return }, { passive: false })</script>
+	</body>
+</html>
